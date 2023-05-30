@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lx-music-sync-server
+spec:
+  selector:
+    matchLabels:
+      app: lx-music-sync-server
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: lx-music-sync-server
+    spec:
+      containers:
+      - name: lx-music-sync-server
+        image: okteto.dev/lx-music-sync-server:latest
+        ports:
+        - containerPort: 9527

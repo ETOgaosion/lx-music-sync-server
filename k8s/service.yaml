@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: lx-music-sync-server
+spec:
+  type: LoadBalancer
+  ports:
+    - name: http
+      port: 9527
+  selector:
+    app: lx-music-sync-server
