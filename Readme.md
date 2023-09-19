@@ -6,7 +6,6 @@
 
 **由于服务本身不提供https协议支持，若将服务部署在公网，请务必使用Nginx之类的服务做反向代理（SSL证书需可信且[证书链完整](https://stackoverflow.com/a/60020493)），实现客户端到服务器之间的https连接。**
 
-⚠️当前版本存在**密码长度缺陷**问题，详情看：<https://github.com/lyswhut/lx-music-sync-server/issues/28>
 
 ## 环境要求
 
@@ -52,20 +51,20 @@ npm i -g pm2
 
 ### 安装依赖
 
-若安装依赖过程中出现因`utf-8-validate`包编译失败的错误，请尝试搜索相关错误解决，若实在无法解决，则可以编辑`package.json`文件删除`dependencies`下的`utf-8-validate`后，重新运行`npm install --omit=dev`或`npm install`即可
+若安装依赖过程中出现因`utf-8-validate`包编译失败的错误，请尝试搜索相关错误解决，若实在无法解决，则可以编辑`package.json`文件删除`dependencies`下的`utf-8-validate`后，重新运行`npm ci --omit=dev`或`npm ci`即可
 
 
 如果你是在release下载的压缩包，则解压后项目目录执行以下命令安装依赖：
 
 ```bash
-npm install --omit=dev
+npm ci --omit=dev
 ```
 
 
 如果你是直接下载的源码，则在本目录中运行以下命令
 
 ```bash
-npm install
+npm ci
 npm run build
 ```
 
@@ -112,70 +111,52 @@ pm2 startup
 
 代理需要配置两条规则：
 
-1. 代理链接 URL 根路径下的 WebSocket 请求到 LX Sync 服务
-2. 代理链接 URL 根路径下所有子路径的 HTTP 请求到 LX Sync 服务
+1. 代理链接 URL 根路径下所有子路径的 **WebSocket** 请求到 LX Sync 服务
+2. 代理链接 URL 根路径下所有子路径的 **HTTP** 请求到 LX Sync 服务
 
 #### 配置
 
 编辑Nginx配置文件，在server下添加代理规则，如果你当前server块下只打算配置 LX Sync 服务，那么可以使用以下配置：
 
-<details>
-  <summary>点击展开</summary>
-
 ```conf
+map $http_upgrade $connection_upgrade{
+    default upgrade;
+    '' close;
+}
 server {
     # ...
-    location = / { # 该规则用于代理路径下的ws请求
-        proxy_set_header X-Real-IP $remote_addr; # 该头部与config.js文件的 proxy.header 对应
+    location / {
+        proxy_set_header X-Real-IP $remote_addr;  # 该头部与config.js文件的 proxy.header 对应
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header Host  $http_host;
+        proxy_pass http://127.0.0.1:9527;
+        proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "Upgrade";
-        proxy_set_header X-Nginx-Proxy true;
-        proxy_pass http://127.0.0.1:9527;
-        proxy_redirect default;
-    }
-    location / { # 该规则用于代理路径下的http请求
-        proxy_set_header X-Real-IP $remote_addr; # 该头部与config.js文件的
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header Host  $http_host;
-        proxy_set_header Connection "";
-        proxy_set_header X-Nginx-Proxy true;
-        proxy_pass http://127.0.0.1:9527;
-        proxy_redirect default;
+        proxy_set_header Connection $connection_upgrade;
     }
 }
 ```
-</details>
 
 如果你当前server块下存在其他服务，那么可以配置路径前缀转发：
 
-<details>
-  <summary>点击展开</summary>
-
 ```conf
-location /xxx/ { # 该规则用于代理路径下的http请求
-    proxy_set_header X-Real-IP $remote_addr;  # 该头部与config.js文件的 proxy.header 对应
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header Host  $http_host;
-    proxy_set_header Connection "";
-    proxy_set_header X-Nginx-Proxy true;
-    proxy_pass http://127.0.0.1:9527;
-    proxy_redirect default;
+map $http_upgrade $connection_upgrade{
+    default upgrade;
+    '' close;
 }
-location /xxx { # 该规则用于代理路径下的ws请求
-    proxy_set_header X-Real-IP $remote_addr; # 该头部与config.js文件的 proxy.header 对应
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header Host  $http_host;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "Upgrade";
-    proxy_set_header X-Nginx-Proxy true;
-    proxy_pass http://127.0.0.1:9527;
-    proxy_redirect default;
+server {
+    # ...
+    location /xxx/ {
+        proxy_set_header X-Real-IP $remote_addr;  # 该头部与config.js文件的 proxy.header 对应
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Host  $http_host;
+        proxy_pass http://127.0.0.1:9527;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+    }
 }
 ```
-
-</details>
 
 注：上面的`xxx`是你想要代理的路径前缀（可以多级）
 
@@ -187,15 +168,15 @@ location /xxx { # 该规则用于代理路径下的ws请求
 
 使用在release下载的压缩包运行的服务：
 
-1. 删除项目目录下的 `server` 目录以及 `index.js`、`package.json`、`package-lock.json` 文件
+1. 删除项目目录下的 `server`、`node_modules` 目录以及 `index.js`、`package.json`、`package-lock.json` 文件
 2. 将新版本的`server`目录 `index.js`、`package.json`、`package-lock.json` 文件复制进去
-3. 执行`npm install --omit=dev`
+3. 执行`npm ci --omit=dev`
 4. 重启服务，执行 `pm2 restart 服务名称或ID` 重启服务（可以先执行`pm2 list`查看服务id或名称）
 
 使用源码编译运行的服务：
 
 1. 重新下载源码或使用git将代码更新到最新版本
-2. 执行 `npm install` 与 `npm run build`
+2. 执行 `npm ci` 与 `npm run build`
 3. 重启你的服务
 
 使用docker：将代码更新到最新后，再打包镜像即可
@@ -203,8 +184,8 @@ location /xxx { # 该规则用于代理路径下的ws请求
 ## 从快照文件恢复数据
 
 1. 停止同步服务
-2. 修改`data/users/<用户名>/snapshotInfo.json`里面的`latest`为你那个备份文件key名（即`snapshot`文件夹下去掉`snapshot_`前缀后的名字）
-3. 删除同目录下`devices.json`文件内`clients`内的所有设备信息，删除后的内容类似：`{"userName":"<用户名>","clients":{}}`
+2. 修改`data/users/<用户名>/list/snapshotInfo.json`里面的`latest`为你那个备份文件key名（即`snapshot`文件夹下去掉`snapshot_`前缀后的名字）
+3. 删除`snapshotInfo.json`文件内`clients`内的所有设备信息，删除后的内容类似：`{...其他内容,"clients":{}}`
 4. 启用同步服务，连接后勾选“完全覆盖”，选择“远程覆盖本地”
 
 ## 附录
@@ -239,4 +220,6 @@ location /xxx { # 该规则用于代理路径下的ws请求
 docker build -t lx-music-sync-server .
 ```
 
-或者看issue中的解决方案：<https://github.com/lyswhut/lx-music-sync-server/issues/4>
+或者使用已发布到 Docker Hub 的镜像：<https://hub.docker.com/r/lyswhut/lx-music-sync-server>
+
+也可以看issue中的解决方案：<https://github.com/lyswhut/lx-music-sync-server/issues/4>
